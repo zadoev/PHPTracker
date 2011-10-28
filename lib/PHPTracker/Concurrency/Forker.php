@@ -17,9 +17,9 @@ declare( ticks = 10 );
  * processes.
  *
  * @package PHPTracker
- * @subpackage Threading
+ * @subpackage Concurrency
  */
-abstract class PHPTracker_Threading_Forker
+abstract class PHPTracker_Concurrency_Forker
 {
     /**
      * Number of child processes wanted.
@@ -82,7 +82,7 @@ abstract class PHPTracker_Threading_Forker
         $sid = posix_setsid();
         if ( false === $sid )
         {
-            throw new PHPTracker_Threading_Error( 'Unable to become session leader (detaching).' );
+            throw new PHPTracker_Concurrency_Error( 'Unable to become session leader (detaching).' );
         }
 
         // We have to handle hangup signals (send when session leader terminates), otherwise it makes child process to stop.
@@ -135,7 +135,7 @@ abstract class PHPTracker_Threading_Forker
      *
      * This method constantly monitors exiting child processes and recreates them.
      *
-     * @throws PHPTracker_Threading_Error When forking is unsuccessful.
+     * @throws PHPTracker_Concurrency_Error When forking is unsuccessful.
      * @param boolean $permanent If true, exiting prpocesses will be recreated.
      * @param integer $n_children Number of children to fork first.
      */
@@ -183,7 +183,7 @@ abstract class PHPTracker_Threading_Forker
     /**
      * Forks the currently running process.
      *
-     * @throws PHPTracker_Threading_Error if the forking is unsuccessful.
+     * @throws PHPTracker_Concurrency_Error if the forking is unsuccessful.
      * @return integer Forked process ID or 0 if you are in the child already.
      */
     protected function fork()
@@ -192,7 +192,7 @@ abstract class PHPTracker_Threading_Forker
 
         if( -1 == $pid )
         {
-            throw new PHPTracker_Threading_Error( 'Unable to fork.' );
+            throw new PHPTracker_Concurrency_Error( 'Unable to fork.' );
         }
 
         return $pid;

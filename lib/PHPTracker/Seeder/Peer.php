@@ -6,7 +6,7 @@
  * @package PHPTracker
  * @subpackage Seeder
  */
-class PHPTracker_Seeder_Peer extends PHPTracker_Threading_Forker
+class PHPTracker_Seeder_Peer extends PHPTracker_Concurrency_Forker
 {
     /**
      * String representation of the address to bind the socket to. Defaults to 127.0.0.1.

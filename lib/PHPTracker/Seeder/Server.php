@@ -9,7 +9,7 @@
  * @package PHPTracker
  * @subpackage Seeder
  */
-class PHPTracker_Seeder_Server extends PHPTracker_Threading_Forker
+class PHPTracker_Seeder_Server extends PHPTracker_Concurrency_Forker
 {
     /**
      * Configuration of this class.
