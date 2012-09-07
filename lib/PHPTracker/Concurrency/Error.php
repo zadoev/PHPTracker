@@ -9,5 +9,3 @@
 class PHPTracker_Concurrency_Error extends PHPTracker_Error
 {
 }
-
-?>

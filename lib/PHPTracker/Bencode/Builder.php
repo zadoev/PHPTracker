@@ -58,5 +58,3 @@ class PHPTracker_Bencode_Builder
         return array_keys( $array ) !== range( 0, ( count( $array ) - 1 ) );
     }
 }
-
-?>

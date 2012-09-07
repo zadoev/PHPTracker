@@ -81,5 +81,3 @@ class PHPTracker_Bencode_Value_ContainerTest extends PHPUnit_Framework_TestCase
     }
 
 }
-
-?>

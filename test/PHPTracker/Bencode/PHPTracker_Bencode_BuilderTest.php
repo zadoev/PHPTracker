@@ -43,5 +43,3 @@ class PHPTracker_Bencode_BuilderTest extends PHPUnit_Framework_TestCase
     }
 
 }
-
-?>

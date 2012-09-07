@@ -100,5 +100,3 @@ class PHPTracker_File_FileTest extends PHPUnit_Framework_TestCase
     }
 
 }
-
-?>

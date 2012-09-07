@@ -31,5 +31,3 @@ interface PHPTracker_Logger_Interface
      */
     public function logError( $message );
 }
-
-?>

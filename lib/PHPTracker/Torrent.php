@@ -245,5 +245,3 @@ class PHPTracker_Torrent
         return $this->file->readBlock( ( $piece_index * $this->size_piece ) + $block_begin , $length );
     }
 }
-
-?>

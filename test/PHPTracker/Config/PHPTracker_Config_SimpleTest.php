@@ -70,5 +70,3 @@ class PHPTracker_Config_SimpleTest extends PHPUnit_Framework_TestCase
         $this->object->getMulti( array( 'key1', 'key8' ) );
     }
 }
-
-?>

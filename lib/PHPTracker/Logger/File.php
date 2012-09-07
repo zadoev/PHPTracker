@@ -99,5 +99,3 @@ class PHPTracker_Logger_File implements PHPTracker_Logger_Interface
         return date( "[Y-m-d H:i:s] " ) . ( $error ? '[ERROR] ' : '' ) . addcslashes( $message, "\n\r" ) . PHP_EOL;
     }
 }
-
-?>

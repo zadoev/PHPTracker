@@ -15,5 +15,3 @@ interface PHPTracker_Persistence_ResetWhenForking
      */
     public function resetAfterForking();
 }
-
-?>

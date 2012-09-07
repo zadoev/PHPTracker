@@ -61,5 +61,3 @@ abstract class PHPTracker_Bencode_Value_Container extends PHPTracker_Bencode_Val
      */
     abstract public function contain( PHPTracker_Bencode_Value_Abstract $sub_value, PHPTracker_Bencode_Value_String $key = null );
 }
-
-?>

@@ -57,5 +57,3 @@ class PHPTracker_Bencode_Value_DictionaryTest extends PHPUnit_Framework_TestCase
     }
 
 }
-
-?>

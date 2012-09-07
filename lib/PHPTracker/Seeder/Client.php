@@ -224,5 +224,3 @@ Data sent: $this->data_sent
 STATS;
     }
 }
-
-?>

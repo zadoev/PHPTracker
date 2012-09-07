@@ -185,4 +185,3 @@ class PHPTracker_Persistence_MysqlResult implements ArrayAccess, Iterator, Count
         return $return;
     }
 }
-?>

@@ -405,5 +405,3 @@ class PHPTracker_Seeder_Peer extends PHPTracker_Concurrency_Forker
         $client->socketWrite( pack( 'N', strlen( $message ) ) . $message );
     }
 }
-
-?>

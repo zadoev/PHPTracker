@@ -101,5 +101,3 @@ class PHPTracker_Bencode_ParserTest extends PHPUnit_Framework_TestCase
     }
 
 }
-
-?>

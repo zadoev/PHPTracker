@@ -9,5 +9,3 @@
 class PHPTracker_Bencode_Error_InvalidType extends PHPTracker_Bencode_Error
 {
 }
-
-?>

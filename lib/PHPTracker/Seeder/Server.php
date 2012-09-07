@@ -130,5 +130,3 @@ class PHPTracker_Seeder_Server extends PHPTracker_Concurrency_Forker
         exit( 0 );
     }
 }
-
-?>

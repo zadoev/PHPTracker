@@ -32,5 +32,3 @@ class PHPTracker_Bencode_Value_List extends PHPTracker_Bencode_Value_Container
         return $string_represent . "e";
     }
 }
-
-?>

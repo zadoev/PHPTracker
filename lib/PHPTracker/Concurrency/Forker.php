@@ -198,4 +198,3 @@ abstract class PHPTracker_Concurrency_Forker
         return $pid;
     }
 }
-?>
