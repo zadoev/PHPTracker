@@ -13,5 +13,3 @@ class PHPTracker_AutoloaderTest extends PHPUnit_Framework_TestCase
         $this->assertNull($autoloader->autoload('Foo'), '->autoload() returns false if it is not able to load a class');
     }
 }
-
-?>

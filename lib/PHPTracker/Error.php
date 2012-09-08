@@ -8,5 +8,3 @@
 class PHPTracker_Error extends Exception
 {
 }
-
-?>

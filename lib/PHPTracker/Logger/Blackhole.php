@@ -30,5 +30,3 @@ class PHPTracker_Logger_Blackhole implements PHPTracker_Logger_Interface
     {
     }
 }
-
-?>

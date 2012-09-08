@@ -9,5 +9,3 @@
 class PHPTracker_File_Error_Unreadable extends PHPTracker_File_Error
 {
 }
-
-?>

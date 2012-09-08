@@ -9,5 +9,3 @@
 class PHPTracker_Bencode_Error extends PHPTracker_Error
 {
 }
-
-?>

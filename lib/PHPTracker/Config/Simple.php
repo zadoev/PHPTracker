@@ -72,5 +72,3 @@ class PHPTracker_Config_Simple implements PHPTracker_Config_Interface
         return $return;
     }
 }
-
-?>

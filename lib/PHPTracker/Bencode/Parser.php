@@ -201,5 +201,3 @@ class PHPTracker_Bencode_Parser
         return new PHPTracker_Bencode_Value_Dictionary();
     }
 }
-
-?>

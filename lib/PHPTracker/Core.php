@@ -173,6 +173,3 @@ class PHPTracker_Core
         ) );
     }
 }
-
-
-?>

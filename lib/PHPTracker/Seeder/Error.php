@@ -9,5 +9,3 @@
 class PHPTracker_Seeder_Error extends PHPTracker_Error
 {
 }
-
-?>

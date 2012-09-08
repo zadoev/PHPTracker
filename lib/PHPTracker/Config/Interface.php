@@ -37,5 +37,3 @@ interface PHPTracker_Config_Interface
      */
     public function getMulti( array $config_names, $needed = true, $defaults = null );
 }
-
-?>

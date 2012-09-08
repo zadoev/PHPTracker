@@ -44,5 +44,3 @@ class PHPTracker_Bencode_Value_Dictionary extends PHPTracker_Bencode_Value_Conta
         return $string_represent . "e";
     }
 }
-
-?>

@@ -32,5 +32,3 @@ abstract class PHPTracker_Bencode_Value_Abstract
      */
     abstract public function represent();
 }
-
-?>

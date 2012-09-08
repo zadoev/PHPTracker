@@ -44,5 +44,3 @@ class PHPTracker_Bencode_Value_StringTest extends PHPUnit_Framework_TestCase
         new PHPTracker_Bencode_Value_String( array() );
     }
 }
-
-?>

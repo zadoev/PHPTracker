@@ -128,5 +128,3 @@ class PHPTracker_TorrentTest extends PHPUnit_Framework_TestCase
     }
 
 }
-
-?>

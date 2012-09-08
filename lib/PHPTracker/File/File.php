@@ -191,5 +191,3 @@ class PHPTracker_File_File
         }
     }
 }
-
-?>

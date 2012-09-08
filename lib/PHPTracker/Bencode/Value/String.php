@@ -39,5 +39,3 @@ class PHPTracker_Bencode_Value_String extends PHPTracker_Bencode_Value_Abstract
         return $this->value;
     }
 }
-
-?>

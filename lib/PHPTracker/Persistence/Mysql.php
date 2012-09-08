@@ -400,5 +400,3 @@ SQL;
         $this->connection = null;
     }
 }
-
-?>

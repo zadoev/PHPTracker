@@ -99,5 +99,3 @@ interface PHPTracker_Persistence_Interface
      */
     public function getPeerStats( $info_hash, $peer_id );
 }
-
-?>

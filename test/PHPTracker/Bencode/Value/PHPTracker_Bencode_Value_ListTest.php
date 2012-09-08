@@ -40,5 +40,3 @@ class PHPTracker_Bencode_Value_ListTest extends PHPUnit_Framework_TestCase
     }
 
 }
-
-?>

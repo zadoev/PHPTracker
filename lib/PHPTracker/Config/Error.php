@@ -9,5 +9,3 @@
 class PHPTracker_Config_Error extends PHPTracker_Error
 {
 }
-
-?>

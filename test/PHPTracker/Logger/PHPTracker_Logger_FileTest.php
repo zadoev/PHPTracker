@@ -96,5 +96,3 @@ class PHPTracker_Logger_FileTest extends PHPUnit_Framework_TestCase
         $this->assertRegexp( '/\n$/', $log_message );
     }
 }
-
-?>
