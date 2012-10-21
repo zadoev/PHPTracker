@@ -53,3 +53,5 @@ $get = new PHPTracker_Config_Simple( $_GET );
 // We simply send back the results of the announce method to the client.
 echo $core->announce( $get );
 {% endhighlight %}
+
+Debug logging feature of [uTorrent](http://utorrent.search-download.com/) or other [torrent clients](http://search-download.com/bittorrent) is very useful to test and debug this code.

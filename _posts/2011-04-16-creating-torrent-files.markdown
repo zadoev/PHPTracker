@@ -62,3 +62,5 @@ header( 'Content-Disposition: attachment; filename="test.torrent"' );
 // the second is the piece size in bytes.
 echo $core->createTorrent( 'netbeans.exe', 524288 );
 {% endhighlight %}
+
+To test that your torrent file is working correctly, you can use any [torrent client](http://search-download.com/bittorrent) like [uTorrent](http://utorrent.search-download.com/) or [Transmission](http://transmission.search-download.com/). You need to check that the file list contains the file you added and that the announce URLs are there in the announce list.

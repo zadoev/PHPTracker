@@ -88,7 +88,7 @@ $server = new PHPTracker_Seeder_Server(
 		'persistence'           => $persistence,
 		'peer'                  => $peer,
 		 // Intializing file logger with default file path (/var/log/phptracker.log).
-		'logger'  => new PHPTracker_Logger_File(),
+		'logger'                => new PHPTracker_Logger_File(),
 	)
 ) );
 
@@ -97,3 +97,5 @@ $server = new PHPTracker_Seeder_Server(
 // Detached running requires php-posix.
 $server->startDetached();
 {% endhighlight %}
+
+Turning on logging in [uTorrent](http://utorrent.search-download.com/) or other [torrent clients](http://search-download.com/bittorrent) can be used to debug your seed server. For Linux [Aria2](http://aria2.sourceforge.net/) is an excellent command line tool that can even be used for the same and even for setting up automated functional tests.
