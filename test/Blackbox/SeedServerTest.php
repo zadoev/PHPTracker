@@ -61,6 +61,9 @@ class SeedServerTest extends \PHPUnit_Framework_TestCase
 
     /**
      * @group slow
+     * @requires pdo
+     * @requires posix
+     * @requires pcntl_fork
      */
     public function testSeeding()
     {

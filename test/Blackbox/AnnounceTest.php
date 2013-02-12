@@ -12,17 +12,25 @@ class AnnounceTest extends \PHPUnit_Framework_TestCase
 
     const CLIENT_IP             = '123.123.123.123';
     const CLIENT_PORT           = '555';
+    const CLIENT_PORT_COMPACT   = "\x02\x2B";
     const ANNOUNCE_INTERVAL     = 60;
     const INFO_HASH             = "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0";
     const PEER_ID               = "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\1";
     const SEED_PEER_ID          = "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\2";
+    const SEED_IP               = '124.124.124.124';
+    const SEED_IP_COMPACT       = "\x7c\x7c\x7c\x7c";
     const LEECH_PEER_ID         = "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\3";
+    const LEECH_IP              = '125.125.125.125';
+    const LEECH_IP_COMPACT      = "\x7d\x7d\x7d\x7d";
 
     public function setUp()
     {
         $this->setupDatabaseFixture();
     }
 
+    /**
+     * @requires pdo
+     */
     public function testFirstAnnounce()
     {
         $core = new Core( $this->persistence );
@@ -47,6 +55,9 @@ class AnnounceTest extends \PHPUnit_Framework_TestCase
         );
     }
 
+    /**
+     * @requires pdo
+     */
     public function testAnnounceWithPeers()
     {
         $core = new Core( $this->persistence );
@@ -68,17 +79,55 @@ class AnnounceTest extends \PHPUnit_Framework_TestCase
         $this->assertEquals( 1, $parsed_response['complete'] );
         $this->assertEquals( 1, $parsed_response['incomplete'] );
         $this->assertContains( array(
-            // Using the same IP and port for the other peers.
-            'ip'        => self::CLIENT_IP,
+            // Using the same port for the other peers.
+            'ip'        => self::SEED_IP,
             'port'      => self::CLIENT_PORT,
             'peer id'   => self::SEED_PEER_ID,
         ), $parsed_response['peers'] );
         $this->assertContains( array(
-            // Using the same IP and port for the other peers.
-            'ip'        => self::CLIENT_IP,
+            // Using the same port for the other peers.
+            'ip'        => self::LEECH_IP,
             'port'      => self::CLIENT_PORT,
             'peer id'   => self::LEECH_PEER_ID,
         ), $parsed_response['peers'] );
+        $this->assertEquals(
+            self::ANNOUNCE_INTERVAL,
+            $parsed_response['interval']
+        );
+    }
+
+    /**
+     * @requires pdo
+     */
+    public function testAnnounceWithCompactPeers()
+    {
+        $core = new Core( $this->persistence );
+
+        $this->announceOtherPeers( $core );
+
+        $get = array(
+            'info_hash'     => self::INFO_HASH,
+            'peer_id'       => self::PEER_ID,
+            'port'          => self::CLIENT_PORT,
+            'uploaded'      => 1024,
+            'downloaded'    => 2048,
+            'left'          => 4096,
+            'compact'       => 1,
+        );
+
+        $response = $core->announce( $get, self::CLIENT_IP, self::ANNOUNCE_INTERVAL );
+        $parsed_response = $this->parseResponse( $response );
+
+        $this->assertEquals( 1, $parsed_response['complete'] );
+        $this->assertEquals( 1, $parsed_response['incomplete'] );
+        $this->assertContains( 
+            self::SEED_IP_COMPACT . self::CLIENT_PORT_COMPACT, 
+            $parsed_response['peers'] 
+        );
+        $this->assertContains(
+            self::LEECH_IP_COMPACT . self::CLIENT_PORT_COMPACT, 
+            $parsed_response['peers'] 
+        );
         $this->assertEquals(
             self::ANNOUNCE_INTERVAL,
             $parsed_response['interval']
@@ -125,7 +174,7 @@ class AnnounceTest extends \PHPUnit_Framework_TestCase
             'uploaded'      => 0,
             'downloaded'    => 1024,
             'left'          => 0,
-        ), self::CLIENT_IP, self::ANNOUNCE_INTERVAL );
+        ), self::SEED_IP, self::ANNOUNCE_INTERVAL );
 
         $core->announce( array(
             'info_hash'     => self::INFO_HASH,
@@ -135,7 +184,7 @@ class AnnounceTest extends \PHPUnit_Framework_TestCase
             'downloaded'    => 7168,
             'left'          => 6144,
             'event'         => 'completed'
-        ), self::CLIENT_IP, self::ANNOUNCE_INTERVAL );
+        ), self::SEED_IP, self::ANNOUNCE_INTERVAL );
 
         // Announcing a leecher.
         $core->announce( array(
@@ -145,6 +194,6 @@ class AnnounceTest extends \PHPUnit_Framework_TestCase
             'uploaded'      => 1024,
             'downloaded'    => 2048,
             'left'          => 4096,
-        ), self::CLIENT_IP, self::ANNOUNCE_INTERVAL );
+        ), self::LEECH_IP, self::ANNOUNCE_INTERVAL );
     }
 }

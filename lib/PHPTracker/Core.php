@@ -126,7 +126,17 @@ class Core
                 ( 'stopped' == $event ) ? 0 : $interval * 2 // If the client gracefully exists, we set its ttl to 0, double-interval otherwise.
             );
 
-            $peers          = $this->persistence->getPeers( $get['info_hash'], $get['peer_id'], $compact, $no_peer_id );
+            $peers = $this->persistence->getPeers( $get['info_hash'], $get['peer_id'] );
+
+            if ( $compact )
+            {
+                $peers = $this->compactPeers( $peers );
+            }
+            elseif ( $no_peer_id )
+            {
+                $peers = $this->removePeerId( $peers );
+            }
+
             $peer_stats     = $this->persistence->getPeerStats( $get['info_hash'], $get['peer_id'] );
 
             $announce_response = array(
@@ -143,6 +153,44 @@ class Core
             trigger_error( 'Failure while announcing: ' . $e->getMessage() . "\n" . $e->getTraceAsString(), E_USER_WARNING );
             return $this->announceFailure( "Failed to announce because of internal server error." );
         }
+    }
+
+    /**
+     * As per request of the announcing client we might need to compact peers.
+     *
+     * Compacting means representing the IP in a big-endian long and the port
+     * as a big-endian short and concatenating all of them in a string.
+     *
+     * @see http://wiki.theory.org/BitTorrentSpecification#Tracker_Response
+     * @param array $peers List of peers with their IP address and port.
+     * @return string
+     */
+    private function compactPeers( array $peers )
+    {
+        $compact_peers = "";
+        foreach ( $peers as $peer )
+        {
+            $compact_peers .=
+                pack( 'N', ip2long( $peer['ip'] ) ) .
+                pack( 'n', $peer['port'] );
+        }
+        return $compact_peers;
+    }
+
+    /**
+     * As per request of the announcing client we might need to remove peer IDs.
+     *
+     * @see http://wiki.theory.org/BitTorrentSpecification#Tracker_Response
+     * @param array $peers List of peers with their IP address and port.
+     * @return string
+     */
+    private function removePeerId( array $peers )
+    {
+        foreach ( $peers as $peer_index => $peer )
+        {
+            unset( $peers[$peer_index]['peer id'] );
+        }
+        return $peers;
     }
 
     /**
