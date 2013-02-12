@@ -1,35 +1,37 @@
 <?php
 
+namespace PHPTracker;
+
+use PHPTracker\Bencode\Builder as BencodeBuilder;
+
+use PHPTracker\File\File;
+use PHPTracker\Error\EmptyAnnounceListError;
+use PHPTracker\PErsistence\PersistenceInterface;
+
 /**
  * Public interface to access some Bittorrent actions like creating torrent file and announcing peer.
  *
  * @package PHPTracker
  */
-class PHPTracker_Core
+class Core
 {
-    /**
-     * Configuration of this class.
-     *
-     * @var PHPTracker_Config_Interface
-     */
-    protected $config;
-
     /**
      * Persistence class to save/retrieve data.
      *
-     * @var PHPTracker_Persistence_Interface
+     * @var PersistenceInterface
      */
-    protected $persistence;
+    private $persistence;
 
     /**
-     * Intializing the object with the config.
+     * Setting up instance.
      *
-     * @param PHPTracker_Config_Interface $config
+     * @param PersistenceInterface $persistence Persitence implementation.
+     *                             Has to be shared with torrent creator and
+     *                             seed server.
      */
-    public function  __construct( PHPTracker_Config_Interface $config )
+    public function  __construct( PersistenceInterface $persistence )
     {
-        $this->config       = $config;
-        $this->persistence  = $this->config->get( 'persistence' );
+        $this->persistence  = $persistence;
     }
 
     /**
@@ -40,109 +42,92 @@ class PHPTracker_Core
      * @throws PHPTracker_Error When the announce-list is empty.
      * @return string
      */
-    public function createTorrent( $file_path, $size_piece = 262144, $basename = null )
+    public function createTorrent( $announce_urls, $file_path, $size_piece = 262144, $basename = null )
     {
-        $torrent = new PHPTracker_Torrent( new PHPTracker_File_File( $file_path ), $size_piece, $file_path, $basename );
+        $torrent = new Torrent( new File( $file_path ), $size_piece, $file_path, $basename );
 
-        $announce = $this->config->get( 'announce' );
-        if ( !is_array( $announce ) )
+        $announce_urls = (array) $announce_urls;
+        if ( empty( $announce_urls ) )
         {
-            $announce = array( $announce );
-        }
-        if ( empty( $announce ) )
-        {
-            throw new PHPTracker_Error( 'Empty announce list!' );
+            throw new EmptyAnnounceListError( 'Empty announce list!' );
         }
 
         $this->persistence->saveTorrent( $torrent );
 
-        return $torrent->createTorrentFile( $announce );
+        return $torrent->createTorrentFile( $announce_urls );
     }
 
     /**
      * Announce a peer to be tracked and return message to the client.
      *
-     * This methods needs 'interval' key to be set in the config of the class
-     * (not i the GET!). This is a number representing seconds for the client to
-     * wait for the next announcement.
-     *
-     * Optional config key 'load_balancing' (ON by defailt) adds 10% dispersion
-     * to the interval value to avoid possible announce peeks.
-     *
-     * @param PHPTracker_Config_Interface $get Config-like representation of the CGI parameters (aka. GET) sent.
+     * @param array $get Parameters from the query string sent from the peer.
+     * @param string $ip Annotated IP address of the peer.
+     * @param integer $ip Desired interval between future announcings.
      * @return string
      */
-    public function announce( PHPTracker_Config_Interface $get )
+    public function announce( array $get, $ip, $interval )
     {
         try
         {
-            try
+            $mandatory_keys = array(
+                'info_hash',
+                'peer_id',
+                'port',
+                'uploaded',
+                'downloaded',
+                'left',
+            );
+            $missing_keys = array_diff( $mandatory_keys, array_keys( $get ) );
+            if ( !empty( $missing_keys ) )
             {
-                list( $info_hash, $peer_id, $port, $uploaded, $downloaded, $left ) = $get->getMulti( array(
-                    'info_hash',
-                    'peer_id',
-                    'port',
-                    'uploaded',
-                    'downloaded',
-                    'left',
-                ), true );
-            }
-            catch ( PHPTracker_Config_Error_Missing $e )
-            {
-                return $this->announceFailure( "Invalid get parameters; " . $e->getMessage() );
+                return $this->announceFailure( "Invalid get parameters; Missing: " . implode( ', ', $missing_keys ) );
             }
 
-            // IP address might be set explicitly in the GET.
-            $ip     = $get->get( 'ip', false, $this->config->get( 'ip' ) );
-            $event  = $get->get( 'event', false, '' );
+            // IP address might come from $_GET.
+            $ip         = isset( $get['ip'] )           ? $get['ip']            : $ip;
+            $event      = isset( $get['event'] )        ? $get['event']         : '';
+            $compact    = isset( $get['compact'] )      ? $get['compact']       : 0;
+            $no_peer_id = isset( $get['no_peer_id'] )   ? $get['no_peer_id']    : 0;
 
-            if ( 20 != strlen( $info_hash ) )
+            if ( 20 != strlen( $get['info_hash'] ) )
             {
                 return $this->announceFailure( "Invalid length of info_hash." );
             }
-            if ( 20 != strlen( $peer_id ) )
+            if ( 20 != strlen( $get['peer_id'] ) )
             {
-                return $this->announceFailure( "Invalid length of info_hash." );
+                return $this->announceFailure( "Invalid length of peer_id." );
             }
-            if ( !( is_numeric( $port ) && is_int( $port = $port + 0 ) && 0 <= $port ) )
+            if ( !self::isNonNegativeInteger( $get['port'] ) )
             {
                 return $this->announceFailure( "Invalid port value." );
             }
-            if ( !( is_numeric( $uploaded ) && is_int( $uploaded = $uploaded + 0 ) && 0 <= $uploaded ) )
+            if ( !self::isNonNegativeInteger( $get['uploaded'] ) )
             {
                 return $this->announceFailure( "Invalid uploaded value." );
             }
-            if ( !( is_numeric( $downloaded ) && is_int( $downloaded = $downloaded + 0 ) && 0 <= $downloaded ) )
+            if ( !self::isNonNegativeInteger( $get['downloaded'] ) )
             {
                 return $this->announceFailure( "Invalid downloaded value." );
             }
-            if ( !( is_numeric( $left ) && is_int( $left = $left + 0 ) && 0 <= $left ) )
+            if ( !self::isNonNegativeInteger( $get['left'] ) )
             {
                 return $this->announceFailure( "Invalid left value." );
             }
 
-            $interval       = intval( $this->config->get( 'interval' ) );
-
             $this->persistence->saveAnnounce(
-                $info_hash,
-                $peer_id,
+                $get['info_hash'],
+                $get['peer_id'],
                 $ip,
-                $port,
-                $downloaded,
-                $uploaded,
-                $left,
+                $get['port'],
+                $get['downloaded'],
+                $get['uploaded'],
+                $get['left'],
                 ( 'completed' == $event ) ? 'complete' : null, // Only set to complete if client said so.
                 ( 'stopped' == $event ) ? 0 : $interval * 2 // If the client gracefully exists, we set its ttl to 0, double-interval otherwise.
             );
 
-            $peers          = $this->persistence->getPeers( $info_hash, $peer_id, $get->get( 'compact', false, false ), $get->get( 'no_peer_id', false, false ) );
-            $peer_stats     = $this->persistence->getPeerStats( $info_hash, $peer_id );
-
-            if ( true === $this->config->get( 'load_balancing', false, true ) )
-            {
-                // Load balancing for tracker announcements.
-                $interval = $interval + mt_rand( round( $interval / -10 ), round( $interval / 10 ) );
-            }
+            $peers          = $this->persistence->getPeers( $get['info_hash'], $get['peer_id'], $compact, $no_peer_id );
+            $peer_stats     = $this->persistence->getPeerStats( $get['info_hash'], $get['peer_id'] );
 
             $announce_response = array(
                 'interval'      => $interval,
@@ -151,11 +136,11 @@ class PHPTracker_Core
                 'peers'         => $peers,
             );
 
-            return PHPTracker_Bencode_Builder::build( $announce_response );
+            return BencodeBuilder::build( $announce_response );
         }
         catch ( Exception $e )
         {
-            trigger_error( 'Failure while announcing: ' . $e->getMessage(), E_USER_WARNING );
+            trigger_error( 'Failure while announcing: ' . $e->getMessage() . "\n" . $e->getTraceAsString(), E_USER_WARNING );
             return $this->announceFailure( "Failed to announce because of internal server error." );
         }
     }
@@ -166,10 +151,25 @@ class PHPTracker_Core
      * @param string $message Public description of the failure.
      * @return string
      */
-    protected function announceFailure( $message )
+    private function announceFailure( $message )
     {
-        return PHPTracker_Bencode_Builder::build( array(
+        return BencodeBuilder::build( array(
             'failure reason' => $message
         ) );
+    }
+
+    /**
+     * Tells if a passed value (user input) is a non-negative integer.
+     *
+     * @return true
+     */
+    private static function isNonNegativeInteger( $value )
+    {
+        return
+            is_numeric( $value )
+            &&
+            is_int( $value = $value + 0 )
+            &&
+            0 <= $value;
     }
 }

@@ -1,24 +1,28 @@
 <?php
 
+namespace PHPTracker\Bencode\Value;
+
+use PHPTracker\Bencode\Error\InvalidTypeError;
+
 /**
  * Decoded bencode string, representing an ordered set of bytes.
  *
  * @package PHPTracker
  * @subpackage Bencode
  */
-class PHPTracker_Bencode_Value_String extends PHPTracker_Bencode_Value_Abstract
+class String extends AbstractValue
 {
     /**
      * Intializing the object with its parsed value.
      *
-     * @throws PHPTracker_Bencode_Error_InvalidType In the value is not a string.
+     * @throws InvalidTypeError In the value is not a string.
      * @param string $value
      */
     public function __construct( $value )
     {
         if ( !is_string( $value ) )
         {
-            throw new PHPTracker_Bencode_Error_InvalidType( "Invalid string value: $value" );
+            throw new InvalidTypeError( "Invalid string value: " . var_export( $value, true ) );
         }
         $this->value = $value;
     }

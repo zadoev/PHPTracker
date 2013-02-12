@@ -1,16 +1,26 @@
 <?php
 
+namespace PHPTracker\Bencode;
+
+use PHPTracker\Bencode\Value\AbstractValue;
+use PHPTracker\Bencode\Value\Container;
+use PHPTracker\Bencode\Value\Dictionary;
+use PHPTracker\Bencode\Value\Integer;
+use PHPTracker\Bencode\Value\ListValue;
+use PHPTracker\Bencode\Value\String;
+use PHPTracker\Bencode\Error\ParseError;
+
 /**
- * Bencode parser creating Bencode value classes our of a bencoded string.
+ * Parser for Bencode strings.
  *
  * @package PHPTracker
  * @subpackage Bencode
  */
-class PHPTracker_Bencode_Parser
+class Parser
 {
-    protected $pointer;
-    protected $container_stack;
-    protected $string;
+    private $pointer;
+    private $container_stack;
+    private $string;
 
     /**
      * Setting up object.
@@ -19,14 +29,14 @@ class PHPTracker_Bencode_Parser
      */
     public function __construct( $string )
     {
-        $this->string = $string;
+        $this->string = (string) $string;
     }
 
     /**
      * Parsing the string attribute of the object.
      *
-     * @throws PHPTracker_Bencode_Error_Parse In case of parse error.
-     * @return PHPTracker_Bencode_Value_Abstract Parsed value.
+     * @throws ParseError In case of parse error.
+     * @return Abstract Parsed value.
      */
     public function parse()
     {
@@ -38,7 +48,7 @@ class PHPTracker_Bencode_Parser
         {
             if ( isset( $value ) && 0 == count( $this->container_stack ) )
             {
-                throw new PHPTracker_Bencode_Error_Parse( "Bencode parse error at pointer {$this->pointer}. Unstructured values following each other. Use list/dictionary!", $this->pointer );
+                throw new ParseError( "Bencode parse error at pointer {$this->pointer}. Unstructured values following each other. Use list/dictionary!", $this->pointer );
             }
 
             switch ( $this->string[$this->pointer] )
@@ -68,13 +78,13 @@ class PHPTracker_Bencode_Parser
                 case 'e':
                     if ( 0 == count( $this->container_stack ) )
                     {
-                        throw new PHPTracker_Bencode_Error_Parse( "Bencode parse error at pointer {$this->pointer}. Unexpected endng.", $this->pointer );
+                        throw new ParseError( "Bencode parse error at pointer {$this->pointer}. Unexpected ending.", $this->pointer );
                     }
                     if ( isset( $possible_key ) )
                     {
                         // If we have a saved possible key, it means that the number of values in
                         // a dictionary is odd, that is, there is no value for a key.
-                        throw new PHPTracker_Bencode_Error_Parse( "Bencode parse error at pointer {$this->pointer}. Incomplete dictionary.", $this->pointer );
+                        throw new ParseError( "Bencode parse error at pointer {$this->pointer}. Incomplete dictionary.", $this->pointer );
                     }
 
                     // We remove the deepest container from the stack. This might be the final value.
@@ -84,7 +94,7 @@ class PHPTracker_Bencode_Parser
 
                     break;
                 default:
-                    throw new PHPTracker_Bencode_Error_Parse( "Bencode parse error at pointer {$this->pointer}. Invalid value.", $this->pointer );
+                    throw new ParseError( "Bencode parse error at pointer {$this->pointer}. Invalid value.", $this->pointer );
             }
 
             // We store the current value in the current deepest container (list/dictionary).
@@ -93,7 +103,7 @@ class PHPTracker_Bencode_Parser
                 $last_container = end( $this->container_stack );
 
                 // With list it's easy: you just throw in the values.
-                if ( $last_container instanceof PHPTracker_Bencode_Value_List )
+                if ( $last_container instanceof ListValue )
                 {
                     $last_container->contain( $value );
                 }
@@ -111,16 +121,16 @@ class PHPTracker_Bencode_Parser
             }
 
             // If the currently parsed value is a container, we set it as current container.
-            if ( $value instanceof PHPTracker_Bencode_Value_Container )
+            if ( $value instanceof Container )
             {
                 $this->container_stack[] = $value;
             }
         }
 
-        // At this point we should not have anything in the stack, because we cloased all the dictionaries/lists.
+        // At this point we should not have anything in the stack, because we closed all the dictionaries/lists.
         if ( 0 != count( $this->container_stack ) )
         {
-            throw new PHPTracker_Bencode_Error_Parse( "Bencode parse error at pointer {$this->pointer}. Unclosed dictionary/list", $this->pointer );
+            throw new ParseError( "Bencode parse error at pointer {$this->pointer}. Unclosed dictionary/list", $this->pointer );
         }
 
         // If the whole string is a scalar (int/string), it's OK.
@@ -130,18 +140,18 @@ class PHPTracker_Bencode_Parser
     /**
      * Parses an integer type at the current cursor position and proceeds the cursor.
      *
-     * @throws PHPTracker_Bencode_Error_Parse In case of parse error.
-     * @return PHPTracker_Bencode_Value_Integer
+     * @throws ParseError In case of parse error.
+     * @return Integer
      */
-    protected function parseValueInteger()
+    private function parseValueInteger()
     {
         // This can be FALSE or 0, both are wrong.
         if ( 0 == ( $end_pointer = strpos( $this->string, 'e', $this->pointer ) ) )
         {
-            throw new PHPTracker_Bencode_Error_Parse( "Bencode parse error at pointer {$this->pointer}. Missing ending in integer.", $this->pointer );
+            throw new ParseError( "Bencode parse error at pointer {$this->pointer}. Missing ending in integer.", $this->pointer );
         }
 
-        $value = new PHPTracker_Bencode_Value_Integer( substr( $this->string, ( $this->pointer + 1 ), ( $end_pointer - $this->pointer - 1 ) ) );
+        $value = new Integer( substr( $this->string, ( $this->pointer + 1 ), ( $end_pointer - $this->pointer - 1 ) ) );
         $this->pointer = $end_pointer + 1;
 
         return $value;
@@ -150,24 +160,24 @@ class PHPTracker_Bencode_Parser
     /**
      * Parses a string type at the current cursor position and proceeds the cursor.
      *
-     * @throws PHPTracker_Bencode_Error_Parse In case of parse error.
-     * @return PHPTracker_Bencode_Value_String
+     * @throws ParseError In case of parse error.
+     * @return String
      */
-    protected function parseValueString()
+    private function parseValueString()
     {
         // This can be FALSE or 0, both are wrong.
         if ( 0 == ( $colon_pointer = strpos( $this->string, ':', $this->pointer ) ) )
         {
-            throw new PHPTracker_Bencode_Error_Parse( "Bencode parse error at pointer {$this->pointer}. Missing colon in string.", $this->pointer );
+            throw new ParseError( "Bencode parse error at pointer {$this->pointer}. Missing colon in string.", $this->pointer );
         }
 
         $length = substr( $this->string, $this->pointer, ( $colon_pointer - $this->pointer ) );
         if ( !( strlen( $length ) < 20 && is_numeric( $length ) && is_int( ( $length + 0 ) ) && $length >= 0 ) )
         {
-            throw new PHPTracker_Bencode_Error_Parse( "Bencode parse error at pointer {$this->pointer}. Invalid length definition in string.", $this->pointer );
+            throw new ParseError( "Bencode parse error at pointer {$this->pointer}. Invalid length definition in string.", $this->pointer );
         }
 
-        $value = new PHPTracker_Bencode_Value_String( substr( $this->string, ( $colon_pointer + 1 ), $length ) );
+        $value = new String( substr( $this->string, ( $colon_pointer + 1 ), $length ) );
         $this->pointer = $colon_pointer + $length + 1;
 
         return $value;
@@ -179,12 +189,12 @@ class PHPTracker_Bencode_Parser
      * The list is initialized as empty, and will be populated with the upcoming
      * values.
      *
-     * @return PHPTracker_Bencode_Value_List
+     * @return ListValue
      */
-    protected function parseValueList()
+    private function parseValueList()
     {
         ++$this->pointer;
-        return new PHPTracker_Bencode_Value_List();
+        return new ListValue();
     }
 
     /**
@@ -193,11 +203,11 @@ class PHPTracker_Bencode_Parser
      * The dictionary is initialized as empty, and will be populated with the
      * upcoming values.
      *
-     * @return PHPTracker_Bencode_Value_Dictionary
+     * @return Dictionary
      */
-    protected function parseValueDictionary()
+    private function parseValueDictionary()
     {
         ++$this->pointer;
-        return new PHPTracker_Bencode_Value_Dictionary();
+        return new Dictionary();
     }
 }

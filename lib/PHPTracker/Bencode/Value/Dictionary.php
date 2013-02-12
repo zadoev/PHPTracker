@@ -1,28 +1,33 @@
 <?php
 
+namespace PHPTracker\Bencode\Value;
+
+use PHPTracker\Bencode\Error\InvalidTypeError;
+use PHPTracker\Bencode\Error\InvalidValueError;
+
 /**
  * Decoded bencode dictionary, consisting of key-value pairs.
  *
  * @package PHPTracker
  * @subpackage Bencode
  */
-class PHPTracker_Bencode_Value_Dictionary extends PHPTracker_Bencode_Value_Container
+class Dictionary extends Container
 {
     /**
      * Adds an item to the dictionary.
      *
-     * @param PHPTracker_Bencode_Value_Abstract $sub_value
-     * @param PHPTracker_Bencode_Value_String $key
+     * @param AbstractValue $sub_value
+     * @param String $key
      */
-    public function contain( PHPTracker_Bencode_Value_Abstract $sub_value, PHPTracker_Bencode_Value_String $key = null )
+    public function contain( AbstractValue $sub_value, String $key = null )
     {
         if ( !isset( $key ) )
         {
-            throw new PHPTracker_Bencode_Error_InvalidType( "Invalid key value for dictionary: $sub_value" );
+            throw new InvalidTypeError( "Invalid key value for dictionary: $sub_value" );
         }
         if ( isset( $this->value[$key->value] ) )
         {
-            throw new PHPTracker_Bencode_Error_InvalidValue( "Duplicate key in dictionary: $key->value" );
+            throw new InvalidValueError( "Duplicate key in dictionary: $key->value" );
         }
         $this->value[$key->value] = $sub_value;
     }
@@ -38,7 +43,7 @@ class PHPTracker_Bencode_Value_Dictionary extends PHPTracker_Bencode_Value_Conta
         $string_represent = "d";
         foreach ( $this->value as $key => $sub_value )
         {
-            $key = new PHPTracker_Bencode_Value_String( $key );
+            $key = new String( $key );
             $string_represent .=  $key . $sub_value;
         }
         return $string_represent . "e";

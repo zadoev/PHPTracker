@@ -1,12 +1,17 @@
 <?php
 
+namespace PHPTracker\Seeder;
+
+use PHPTracker\Seeder\Error\SocketError;
+use PHPTracker\Seeder\Error\CloseConnection;
+
 /**
- * Objectolding information of a client connecting to the seeder server.
+ * Object holding state of a client connecting to the seeder server.
  *
  * @package PHPTracker
  * @subpackage Seeder
  */
-class PHPTracker_Seeder_Client
+class Client
 {
     /**
      * 20 bytes peer ID of the client.
@@ -32,7 +37,7 @@ class PHPTracker_Seeder_Client
     /**
      * The torrent the the client intends to download.
      *
-     * @var PHPTracker_Torrent
+     * @var PHPTracker\Torrent
      */
     public $torrent;
 
@@ -41,48 +46,50 @@ class PHPTracker_Seeder_Client
      *
      * @var resource
      */
-    protected $communication_socket;
+    private $communication_socket;
 
     /**
      * Flag to tell if the client is 'choked' by the seed server.
      *
+     * If true, no requests will be answered until the client is unchoked.
+     *
      * @var boolean
      */
-    protected $choked = true;
+    private $choked = true;
 
     /**
      * Stat counter of bytes sent in total to the client (including protocol messages).
      *
      * @var boolean
      */
-    protected $bytes_sent = 0;
+    private $bytes_sent = 0;
 
     /**
      * Stat counter of bytes received in total from the client (including protocol messages).
      *
      * @var boolean
      */
-    protected $bytes_received = 0;
+    private $bytes_received = 0;
 
     /**
      * Stat counter of data bytes sent in total to the client (excluding protocol messages).
      *
      * @var boolean
      */
-    protected $data_sent = 0;
+    private $data_sent = 0;
 
     /**
-     * Used in self::addStatBytes $type argument.
+     * Used in self::addStatBytes $type argument, tells which counter to increment.
      */
     const STAT_BYTES_SENT       = 1;
 
     /**
-     * Used in self::addStatBytes $type argument.
+     * Used in self::addStatBytes $type argument, tells which counter to increment.
      */
     const STAT_BYTES_RECEIVED   = 2;
 
     /**
-     * Used in self::addStatBytes $type argument.
+     * Used in self::addStatBytes $type argument, tells which counter to increment.
      */
     const STAT_DATA_SENT        = 3;
 
@@ -110,7 +117,7 @@ class PHPTracker_Seeder_Client
     /**
      * Blocks execution until incoming connection comes.
      *
-     * @throws PHPTracker_Seeder_Error_Socket If the accepting is unsuccessful.
+     * @throws SocketError If the accepting is unsuccessful.
      * @param resource $listening_socket
      */
     public function socketAccept( $listening_scket )
@@ -118,7 +125,7 @@ class PHPTracker_Seeder_Client
         if ( false === ( $this->communication_socket = socket_accept( $listening_scket ) ) )
         {
             $this->communication_socket = null;
-            throw new PHPTracker_Seeder_Error_Socket( 'Socket accept failed: ' . socket_strerror( socket_last_error( $this->listening_socket ) ) );
+            throw new SocketError( 'Socket accept failed: ' . socket_strerror( socket_last_error( $this->listening_socket ) ) );
         }
         // After successfully accepting connection, we obtain IP address and port of the client for logging.
         if ( false === socket_getpeername( $this->communication_socket, $this->address, $this->port ) )
@@ -132,29 +139,31 @@ class PHPTracker_Seeder_Client
      *
      * Blocks execution until the wanted number of bytes arrives.
      *
-     * @param integer $wanted_length Expected message length in bytes.
-     * @throws PHPTracker_Seeder_Error_Socket If reading fails.
-     * @throws PHPTracker_Seeder_Error_CloseConnection If client closes the connection.
+     * @param integer $expected_length Expected message length in bytes.
+     * @throws SocketError If reading fails.
+     * @throws CloseConnection If client closes the connection.
      * @return string
      */
-    public function socketRead( $wanted_length )
+    public function socketRead( $expected_length )
     {
         $message = '';
 
-        while ( strlen( $message ) < $wanted_length )
+        while ( strlen( $message ) < $expected_length )
         {
-            if ( false === ( $buffer = socket_read( $this->communication_socket, min( $wanted_length - strlen( $message ), 2048 ), PHP_BINARY_READ ) ) )
+            // We read max 2kB at a time.
+            $bytes_to_read = min( $expected_length - strlen( $message ), 2048 );
+            if ( false === ( $buffer = socket_read( $this->communication_socket, $bytes_to_read, PHP_BINARY_READ ) ) )
             {
-                throw new PHPTracker_Seeder_Error_Socket( 'Socket reading failed: ' . socket_strerror( $err_no = socket_last_error( $this->communication_socket ) ) . " ($err_no)" );
+                throw new SocketError( 'Socket reading failed: ' . socket_strerror( $err_no = socket_last_error( $this->communication_socket ) ) . " ($err_no)" );
             }
             if ( '' == $buffer )
             {
-                throw new PHPTracker_Seeder_Error_CloseConnection( 'Client closed the connection.' );
+                throw new CloseConnection( 'Client closed the connection.' );
             }
             $message .= $buffer;
         }
 
-        $this->addStatBytes( $wanted_length, self::STAT_BYTES_RECEIVED );
+        $this->addStatBytes( $expected_length, self::STAT_BYTES_RECEIVED );
 
         return $message;
     }
@@ -172,6 +181,7 @@ class PHPTracker_Seeder_Client
 
     /**
      * Unchokes the client so that it is allowed to send requests.
+     * @see http://wiki.theory.org/BitTorrentSpecification#unchoke:_.3Clen.3D0001.3E.3Cid.3D1.3E
      */
     public function unchoke()
     {
@@ -181,6 +191,7 @@ class PHPTracker_Seeder_Client
 
     /**
      * Chokes the client so that it is not allowed to send requests.
+     * @see http://wiki.theory.org/BitTorrentSpecification#choke:_.3Clen.3D0001.3E.3Cid.3D0.3E
      */
     public function choke()
     {
@@ -211,7 +222,7 @@ class PHPTracker_Seeder_Client
     }
 
     /**
-     * Gives string representation of transfer statistics.
+     * Gives string representation of data transfer statistics.
      *
      * @return string
      */

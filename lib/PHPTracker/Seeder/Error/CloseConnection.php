@@ -1,11 +1,16 @@
 <?php
 
+namespace PHPTracker\Seeder\Error;
+
+use PHPTracker\Seeder\Error;
+
 /**
- * Exception thrown when regular connection closing should occure (eg. the client went away).
+ * Exception thrown to close the connection to a connected client.
+ * Used to control flow, has to be caught.
  *
  * @package PHPTracker
  * @subpackage Seeder
  */
-class PHPTracker_Seeder_Error_CloseConnection extends PHPTracker_Seeder_Error
+class CloseConnection extends Error
 {
 }

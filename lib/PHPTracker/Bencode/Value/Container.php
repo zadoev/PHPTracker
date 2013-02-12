@@ -1,12 +1,16 @@
 <?php
 
+namespace PHPTracker\Bencode\Value;
+
+use PHPTracker\Bencode\Builder;
+
 /**
  * One piece of a decoded bencode container. Could be dictionary or list.
  *
  * @package PHPTracker
  * @subpackage Bencode
  */
-abstract class PHPTracker_Bencode_Value_Container extends PHPTracker_Bencode_Value_Abstract
+abstract class Container extends AbstractValue
 {
     /**
      * Intializing the object with its parsed value.
@@ -24,11 +28,11 @@ abstract class PHPTracker_Bencode_Value_Container extends PHPTracker_Bencode_Val
             return;
         }
 
-        if ( PHPTracker_Bencode_Builder::isDictionary( $value ) )
+        if ( Builder::isDictionary( $value ) )
         {
             foreach( $value as $key => $sub_value )
             {
-                $this->contain( $sub_value, new PHPTracker_Bencode_Value_String( $key ) );
+                $this->contain( $sub_value, new String( $key ) );
             }
         }
         else
@@ -56,8 +60,8 @@ abstract class PHPTracker_Bencode_Value_Container extends PHPTracker_Bencode_Val
     /**
      * Adds an item to the list/dictionary.
      *
-     * @param PHPTracker_Bencode_Value_Abstract $sub_value
-     * @param PHPTracker_Bencode_Value_String $key Only used for dictionaries.
+     * @param AbstractValue $sub_value
+     * @param String $key Only used for dictionaries.
      */
-    abstract public function contain( PHPTracker_Bencode_Value_Abstract $sub_value, PHPTracker_Bencode_Value_String $key = null );
+    abstract public function contain( AbstractValue $sub_value, String $key = null );
 }

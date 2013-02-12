@@ -1,3 +1,11 @@
+* 0.4 BETA
+  * Major refactoring with BC breaks
+  * Added system tests
+  * Dropped support fro PHP 5.2
+  * PDO as persistence
+
+  Upgraded documentation will be coming after releasing 0.4. Please keep using the stable tagged versions.
+
 * 0.2.1
   * basic memory leak protection for seed server
 

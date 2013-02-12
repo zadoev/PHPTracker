@@ -1,28 +1,38 @@
 <?php
 
+namespace PHPTracker\Bencode;
+
+use PHPTracker\Bencode\Value\AbstractValue;
+use PHPTracker\Bencode\Value\Container;
+use PHPTracker\Bencode\Value\Dictionary;
+use PHPTracker\Bencode\Value\Integer;
+use PHPTracker\Bencode\Value\ListValue;
+use PHPTracker\Bencode\Value\String;
+use PHPTracker\Bencode\Error\BuildError;
+
 /**
- * Class creating bencoded values out of PHP values (arrays, scalars).
+ * Class creating a Bencode string out of PHP values (arrays, scalars).
  *
  * @package PHPTracker
  * @subpackage Bencode
  */
-class PHPTracker_Bencode_Builder
+class Builder
 {
     /**
-     * Given an input value, converts it to a bencode value class.
+     * Given an input value, converts it to a Bencode value.
      *
      * @param mixed $input Any PHP scalar or array containing arrays of scalars.
-     * @return PHPTracker_Bencode_Value_Abstract
+     * @return AbstractValue
      */
     static public function build( $input )
     {
         if ( is_int( $input ) )
         {
-            return new PHPTracker_Bencode_Value_Integer( $input );
+            return new Integer( $input );
         }
         if ( is_string( $input ) )
         {
-            return new PHPTracker_Bencode_Value_String( $input );
+            return new String( $input );
         }
         if ( is_array( $input ) )
         {
@@ -35,15 +45,15 @@ class PHPTracker_Bencode_Builder
 
             if ( self::isDictionary( $input ) )
             {
-                return new PHPTracker_Bencode_Value_Dictionary( $constructor_input );
+                return new Dictionary( $constructor_input );
             }
             else
             {
-                return new PHPTracker_Bencode_Value_List( $constructor_input );
+                return new ListValue( $constructor_input );
             }
         }
 
-        throw new PHPTracker_Bencode_Error_Build( "Invalid input type when building: " . gettype( $input ) );
+        throw new BuildError( "Invalid input type when building: " . gettype( $input ) );
     }
 
     /**

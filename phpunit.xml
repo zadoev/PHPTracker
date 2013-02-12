@@ -11,15 +11,18 @@
          syntaxCheck="false"
          bootstrap="test/bootstrap.php"
 >
-  <testsuites>
-    <testsuite name="All tests of PHPTracker">
-      <directory>./test/PHPTracker/</directory>
-    </testsuite>
-  </testsuites>
+    <testsuites>
+        <testsuite name="White box tests for PHPTracker">
+            <directory>./test/Whitebox/</directory>
+        </testsuite>
+        <testsuite name="Black box tests of PHPTracker">
+            <directory>./test/Blackbox/</directory>
+        </testsuite>
+    </testsuites>
 
-  <filter>
-    <whitelist>
-      <directory suffix=".php">./lib/PHPTracker/</directory>
-    </whitelist>
-  </filter>
+    <filter>
+        <whitelist>
+            <directory suffix=".php">./lib/PHPTracker/</directory>
+        </whitelist>
+    </filter>
 </phpunit>

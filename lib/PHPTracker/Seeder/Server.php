@@ -1,5 +1,13 @@
 <?php
 
+namespace PHPTracker\Seeder;
+
+use PHPTracker\Concurrency\ConcurrentInterface;
+use PHPTracker\Concurrency\Forker;
+use PHPTracker\Persistence\PersistenceInterface;
+use PHPTracker\Logger\LoggerInterface;
+use PHPTracker\Logger\BlackholeLogger;
+
 /**
  * Starts seeding server.
  *
@@ -9,28 +17,28 @@
  * @package PHPTracker
  * @subpackage Seeder
  */
-class PHPTracker_Seeder_Server extends PHPTracker_Concurrency_Forker
+class Server implements ConcurrentInterface
 {
-    /**
-     * Configuration of this class.
-     *
-     * @var PHPTracker_Config_Interface
-     */
-    protected $config;
-
     /**
      * Peer object instance to use in this server.
      *
-     * @var PHPTracker_Seeder_Peer
+     * @var Peer
      */
-    protected $peer;
+    private $peer;
+
+    /**
+     * Persistence class to save/retrieve data.
+     *
+     * @var PHPTracker\Persistence\PersistenceInterface
+     */
+    private $persistence;
 
     /**
      * Logger object used to log messages and errors in this class.
      *
-     * @var PHPTracker_Logger_Interface
+     * @var PHPTracker\Logger\LoggerInterface
      */
-    protected $logger;
+    private $logger;
 
     /**
      * Interval for doing announcements to the database.
@@ -50,27 +58,64 @@ class PHPTracker_Seeder_Server extends PHPTracker_Concurrency_Forker
 
     /**
      * Initializes the object with the config class.
-     *
-     * @param PHPTracker_Config_Interface $config
      */
-    public function  __construct( PHPTracker_Config_Interface $config )
+    public function  __construct( Peer $peer, PersistenceInterface $persistence )
     {
-        // It's a daemon, right?
+        // It's a daemon.
         set_time_limit( 0 );
 
-        $this->config    = $config;
-        $this->peer      = $this->config->get( 'peer' );
-        $this->logger    = $this->config->get( 'logger', false, new PHPTracker_Logger_Blackhole() );
+        $this->peer         = $peer;
+        $this->persistence  = $persistence;
+        $this->logger       = new BlackholeLogger();
     }
 
     /**
-     * Called before forking children, intializes the object and sets up listening socket.
+     * Sets logger object.
      *
-     * @return Number of forks to create. If negative, forks are recreated when exiting and absolute values is used.
+     * Default: BlackholeLogger
+     *
+     * @param LoggerInterface $logger
+     * @return self For fluent interface.
      */
-    public function startParentProcess()
+    public function setLogger( LoggerInterface $logger )
     {
-        return -2; // We need 2 processes to run permanenty (minus means permanently recreated).
+        $this->logger = $logger;
+        return $this;
+    }
+
+    /**
+     * Returns the number of the desired child processes to be forked.
+     *
+     * @return integer
+     */
+    public function getNumberOfForks()
+    {
+        return 2;
+    }
+
+    /**
+     * Tells if processes are guarded, that is, should be restarted
+     * after they fail.
+     *
+     * In case of a server application it makes sense to restart failing forks.
+     *
+     * @return boolean
+     */
+    public function isGuarded()
+    {
+        return true;
+    }
+
+    /**
+     * Starts te server by working itself to 2 chid processes.
+     *
+     * The first child takes care of announcing itself to the database,
+     * while the 2nd starts the peer answering incoming download requests.
+     */
+    public function start()
+    {
+        $forker = new Forker( $this );
+        $forker->fork();
     }
 
     /**
@@ -81,12 +126,11 @@ class PHPTracker_Seeder_Server extends PHPTracker_Concurrency_Forker
      *
      * @param integer $slot The slot (numbered index) of the fork. Reused when recreating process.
      */
-    public function startChildProcess( $slot )
+    public function afterFork( $slot )
     {
-        $persistence = $this->config->get( 'persistence' );
-        if ( $persistence instanceof PHPTracker_Persistence_ResetWhenForking )
+        if ( $this->persistence instanceof PHPTracker\Persistence\ResetWhenForking )
         {
-            $persistence->resetAfterForking(); // By reference, we don't need to "save" it to the config.
+            $this->persistence->resetAfterForking();
         }
 
         switch( $slot )
@@ -98,7 +142,7 @@ class PHPTracker_Seeder_Server extends PHPTracker_Concurrency_Forker
                 $this->announce();
                 break;
             default:
-                throw new PHPTracker_Error( 'Invalid process slot while running seeder server.' );
+                throw new \LogicException( 'Invalid process slot while running seeder server.' );
         }
     }
 
@@ -107,21 +151,30 @@ class PHPTracker_Seeder_Server extends PHPTracker_Concurrency_Forker
      *
      * This method runs in infinite loop repeating announcing every self::ANNOUNCE_INTERVAL seconds.
      */
-    protected function announce()
+    private function announce()
     {
-        $persistence    = $this->config->get( 'persistence' );
         $iterations     = 0;
 
         do
         {
-            $all_torrents = $persistence->getAllInfoHash();
+            $all_torrents = $this->persistence->getAllInfoHash();
 
             foreach ( $all_torrents as $torrent_info )
             {
-                $persistence->saveAnnounce( $torrent_info['info_hash'], $this->peer->peer_id, $this->peer->external_address, $this->peer->port, $torrent_info['length'], 0, 0, 'complete', self::ANNOUNCE_INTERVAL );
+                $this->persistence->saveAnnounce(
+                    $torrent_info['info_hash'],
+                    $this->peer->getPeerId(),
+                    $this->peer->getExternalAddress(),
+                    $this->peer->getPort(),
+                    $torrent_info['length'],
+                    0, // Uploaded.
+                    0, // Left.
+                    'complete',
+                    self::ANNOUNCE_INTERVAL
+                );
             }
 
-            $this->logger->logMessage( 'Seeder server announced itself for ' . count( $all_torrents ) . " torrents at address {$this->peer->external_address}:{$this->peer->port} (announces every " . self::ANNOUNCE_INTERVAL . 's).' );
+            $this->logger->logMessage( 'Seeder server announced itself for ' . count( $all_torrents ) . " torrents at address {$this->peer->getExternalAddress()}:{$this->peer->getPort()} (announces every " . self::ANNOUNCE_INTERVAL . 's).' );
 
             sleep( self::ANNOUNCE_INTERVAL );
         } while ( ++$iterations < self::STOP_AFTER_ITERATIONS ); // Memory leak prevention, see self::STOP_AFTER_ITERATIONS.

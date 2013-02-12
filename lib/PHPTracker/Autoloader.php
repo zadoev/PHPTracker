@@ -1,14 +1,18 @@
 <?php
 
+namespace PHPTracker;
+
 /**
- * Lazy-loading class for teh PHPTracker library.
+ * Lazy-loading class for the PHPTracker library.
+ *
+ * Uses PSR-0-ish autoloading for the PHPTracker namespace.
  *
  * @package PHPTracker
  */
-class PHPTracker_Autoloader
+class Autoloader
 {
     /**
-     * Registers PHPTracker_Autoloader as an SPL autoloader.
+     * Registers PHPTracker\Autoloader as an SPL autoloader.
      *
      * Should be called before starting to use the library.
      */
@@ -22,8 +26,7 @@ class PHPTracker_Autoloader
     /**
      * Handles autoloading of classes.
      *
-     * Only loads classes with namees starting with 'PHPTracker'.
-     * Uses PEAR-style naming conventions.
+     * Only loads classes from the 'PHPTracker' namespace.
      *
      * @param string $class A class name inside the PHPTracker package.
      */
@@ -34,7 +37,9 @@ class PHPTracker_Autoloader
             return;
         }
 
-        if ( file_exists( $file = dirname( __FILE__ ) . '/../' . str_replace( '_', '/', $class ) . '.php' ) )
+        $file = __DIR__ . '/../' . str_replace( array( '\\' ), '/', $class ) . '.php';
+
+        if ( file_exists( $file ) )
         {
             require $file;
         }

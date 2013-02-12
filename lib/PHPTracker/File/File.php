@@ -1,43 +1,49 @@
 <?php
 
+namespace PHPTracker\File;
+
+use PHPTracker\File\Error\UnreadableError;
+use PHPTracker\File\Error\NotExistsError;
+
 /**
- * Object providing operations to a physical file on the disk.
+ * Object to process to a physical file in the file system in regards og
+ * torrent file generation and serving.
  *
  * @package PHPTracker
  * @subpackage File
  */
-class PHPTracker_File_File
+class File
 {
     /**
-     * Full path of the file ont eh disk.
+     * Full path of the file on the disk.
      *
      * @var string
      */
-    protected $path;
+    private $path;
 
     /**
      * If the file os opened for reading, this contains its read handle.
      *
      * @var resource
      */
-    protected $read_handle;
+    private $read_handle;
 
     /**
      * Initializing the object with the file full path.
      *
-     * @throws PHPTracker_File_Error_NotExits If the file does not exists.
+     * @throws NotExitsError If the file does not exists.
      * @param string $path
      */
     public function  __construct( $path )
     {
-        $this->path = $path;
+        $this->path = (string) $path;
         $this->shouldExist();
 
         $this->path = realpath( $this->path );
     }
 
     /**
-     * Returnt eh file full path is the object is used as string.
+     * Return the file full path is the object is used as string.
      *
      * @return string
      */
@@ -58,11 +64,11 @@ class PHPTracker_File_File
     }
 
     /**
-     * Tells if the file exists on the disk.
+     * Tells if the file exists.
      *
      * @return boolean
      */
-    protected function exists()
+    private function exists()
     {
         return file_exists( $this->path );
     }
@@ -76,7 +82,7 @@ class PHPTracker_File_File
     {
         if ( false === ( $size = @filesize( $this->path ) ) )
         {
-            throw new PHPTracker_File_Error_Unreadable( "File $this is unreadable." );
+            throw new UnreadableError( "File $this is unreadable." );
         }
         return $size;
     }
@@ -129,10 +135,12 @@ class PHPTracker_File_File
         $file_handle = $this->getReadHandle();
 
         fseek( $file_handle, $begin );
-        if ( false === $buffer = @fread( $file_handle , $length ) )
+        if ( false === $buffer = @fread( $file_handle, $length ) )
         {
-            throw new PHPTracker_File_Error_Unreadable( "File $this is unreadable." );
+            throw new UnreadableError( "File $this is unreadable." );
         }
+
+        // TODO: Check if we could read enough data.
 
         return $buffer;
     }
@@ -140,10 +148,10 @@ class PHPTracker_File_File
     /**
      * Lazy-opens a file for reading and returns its resource.
      *
-     * @throws PHPTracker_File_Error_Unreadable If the file can't be read.
+     * @throws UnreadableError If the file can't be read.
      * @return resource
      */
-    protected function getReadHandle()
+    private function getReadHandle()
     {
         if ( !isset( $this->read_handle ) )
         {
@@ -152,7 +160,7 @@ class PHPTracker_File_File
             if ( false === $this->read_handle )
             {
                 unset( $this->read_handle );
-                throw new PHPTracker_File_Error_Unreadable( "File $this is unreadable." );
+                throw new UnreadableError( "File $this is unreadable." );
             }
 
         }
@@ -160,13 +168,13 @@ class PHPTracker_File_File
     }
 
     /**
-     * Gets SHA1 hash (binary) of a piece of a file.
+     * Gets SHA1 hash of a piece of a file in raw format.
      *
      * @param integer $n_piece 0 bases index of the current peice.
      * @param integer $size_piece Generic piece size of the file in bytes.
      * @return string Byte string of the SHA1 hash of this piece.
      */
-    protected function hashPiece( $n_piece, $size_piece )
+    private function hashPiece( $n_piece, $size_piece )
     {
         $file_handle = $this->getReadHandle();
         $hash_handle = hash_init( 'sha1' );
@@ -181,13 +189,13 @@ class PHPTracker_File_File
     /**
      * Throws exception if the file does not exist.
      *
-     * @throws PHPTracker_File_Error_NotExits
+     * @throws NotExitsError
      */
-    protected function shouldExist()
+    private function shouldExist()
     {
         if ( !$this->exists() )
         {
-            throw new PHPTracker_File_Error_NotExits( "File $this does not exist." );
+            throw new NotExistsError( "File $this does not exist." );
         }
     }
 }

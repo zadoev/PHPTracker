@@ -1,5 +1,13 @@
 <?php
 
+namespace PHPTracker;
+
+use PHPTracker\Bencode\Builder as BencodeBuilder;
+use PHPTracker\File\File;
+use PHPTracker\Error\BlockReadError;
+use PHPTracker\Error\InvalidTorrentAttributeError;
+use PHPTracker\Error\InvalidPieceSizeError;
+
 /**
  * Class representing one torrent file.
  *
@@ -10,81 +18,81 @@
  *
  * @package PHPTracker
  */
-class PHPTracker_Torrent
+class Torrent
 {
     /**
      * Piece size in bytes used to construct the torrent. Normally a power of 2 (eg. 512KB).
      *
      * @var integer
      */
-    protected $size_piece;
+    private $size_piece;
 
     /**
      * File object of the physical file that belongs to this torrent.
      *
-     * @var PHPTracker_File_File
+     * @var PHPTracker\File\File
      */
-    protected $file;
+    private $file;
 
     /**
      * Concatenated ahshes of each piece of tis file.
      *
      * @var string
      */
-    protected $pieces;
+    private $pieces;
 
     /**
      * Size of the file.
      *
      * @var integer
      */
-    protected $length;
+    private $length;
 
     /**
      * Basename of the file.
      *
      * @var string
      */
-    protected $name;
+    private $name;
 
     /**
      * Full path of the physical file of this torrent.
      *
      * @var string
      */
-    protected $file_path;
+    private $file_path;
 
     /**
      * "Info hash" uniquely identifying this torrent.
      *
      * @var string
      */
-    protected $info_hash;
+    private $info_hash;
 
     /**
-     * Initializing object witht he piece size and file object, optionally setting attributes from the database.
+     * Initializing object with the piece size and file object, optionally setting attributes from the database.
      *
-     * @param PHPTracker_File_File $file To intialize 'file' attribute.
+     * @param File $file To intialize 'file' attribute.
      * @param integer $size_piece To intialize 'size_piece' attribute.
      * @param string $file_path Optional. To set 'file_path' attribute. If not set, will be loaded automatically.
      * @param string $name Optional. To set 'name' attribute. If not set, will be loaded automatically.
      * @param integer $length Optional. To set 'length' attribute. If not set, will be loaded automatically.
      * @param string $pieces Optional. To set 'pieces' attribute. If not set, will be loaded automatically.
      * @param string $info_hash Optional. To set 'info_hash' attribute. If not set, will be loaded automatically.
-     * @throws PHPTracker_Error When the piece size is invalid.
+     * @throws InvalidPieceSizeError When the piece size is invalid.
      */
-    public function __construct( PHPTracker_File_File $file, $size_piece, $file_path = null, $name = null, $length = null, $pieces = null, $info_hash = null )
+    public function __construct( File $file, $size_piece, $file_path = null, $name = null, $length = null, $pieces = null, $info_hash = null )
     {
         if ( 0 >= $size_piece = intval( $size_piece ) )
         {
-            throw new PHPTracker_Error( 'Invalid piece size: ' . $size_piece );
+            throw new InvalidPieceSizeError( 'Invalid piece size: ' . $size_piece );
         }
 
         $this->size_piece   = $size_piece;
         $this->file         = $file;
 
         // Optional parameters. If we set them here, they will not be lazy-loaded.
-        $this->length       = $length;
+        $this->length       = is_null( $length ) ? null : (int) $length;
         $this->name         = $name;
         $this->file_path    = $file_path;
         $this->pieces       = $pieces;
@@ -94,11 +102,11 @@ class PHPTracker_Torrent
     /**
      * Lazy-loading attributes on accessing them using external resources.
      *
-     * Object attributes are protected by default, but made read-only with
+     * Object attributes are private by default, but made read-only with
      * this magic method.
      *
      * @param string $attribute The name of the attribute to accesss.
-     * @throws PHPTracker_Error When trying to access non-existent attribute.
+     * @throws InvalidTorrentAttributeError When trying to access non-existent attribute.
      * @return mixed
      */
     public function __get( $attribute )
@@ -144,7 +152,7 @@ class PHPTracker_Torrent
                 return $this->size_piece;
                 break;
             default:
-                throw new PHPTracker_Error( "Can't access attribute $attribute of " . __CLASS__ );
+                throw new InvalidTorrentAttributeError( "Can't access attribute $attribute of " . __CLASS__ );
         }
     }
 
@@ -178,10 +186,10 @@ class PHPTracker_Torrent
      *
      * @return string
      */
-    protected function calculateInfoHash()
+    private function calculateInfoHash()
     {
         // We need to use __get magic method in order to lazy-load attributes.
-        return sha1( PHPTracker_Bencode_Builder::build( array(
+        return sha1( BencodeBuilder::build( array(
             'piece length'  => $this->size_piece,
             'pieces'        => $this->__get( 'pieces' ),
             'name'          => $this->__get( 'name' ),
@@ -200,13 +208,13 @@ class PHPTracker_Torrent
      * @param array $announce_list List of URLs to make announcemenets to.
      * @return string
      */
-    public function createTorrentFile( array $announce_list )
+    public function createTorrentFile( array $announce_urls )
     {
         // Announce-list is a list of lists of strings.
-        foreach ( $announce_list as &$announce_item )
+        $announce_list = array();
+        foreach ( $announce_urls as $announce_url )
         {
-            if ( is_array( $announce_item ) ) continue;
-            $announce_item = array( $announce_item );
+            $announce_list[] = (array) $announce_url;
         }
 
         $torrent_data = array(
@@ -216,11 +224,11 @@ class PHPTracker_Torrent
                 'name'          => $this->__get( 'name' ),
                 'length'        => $this->__get( 'length' ),
             ),
-            'announce'          => reset( reset( $announce_list ) ),
+            'announce'          => reset( $announce_urls ),
             'announce-list'     => $announce_list,
         );
 
-        return PHPTracker_Bencode_Builder::build( $torrent_data );
+        return BencodeBuilder::build( $torrent_data );
     }
 
     /**
@@ -235,11 +243,11 @@ class PHPTracker_Torrent
     {
         if ( $piece_index > ceil( $this->__get( 'length' ) / $this->size_piece ) - 1 )
         {
-            throw new PHPTracker_Error( 'Invalid piece index: ' . $piece_index );
+            throw new BlockReadError( 'Invalid piece index: ' . $piece_index );
         }
         if ( $block_begin + $length > $this->size_piece )
         {
-            throw new PHPTracker_Error( 'Invalid block boundary: ' . $block_begin . ', ' . $length );
+            throw new BlockReadError( 'Invalid block boundary: ' . $block_begin . ', ' . $length );
         }
 
         return $this->file->readBlock( ( $piece_index * $this->size_piece ) + $block_begin , $length );

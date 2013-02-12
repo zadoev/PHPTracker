@@ -1,28 +1,67 @@
 <?php
 
+namespace PHPTracker\Seeder;
+
+use PHPTracker\Concurrency\ConcurrentInterface;
+use PHPTracker\Concurrency\Forker;
+use PHPTracker\Seeder\Error\CloseConnection;
+use PHPTracker\Seeder\Error\SocketError;
+use PHPTracker\Persistence\PersistenceInterface;
+use PHPTracker\Logger\LoggerInterface;
+use PHPTracker\Logger\BlackholeLogger;
+
 /**
  * Daemon seeding all active torrent files on this server.
  *
  * @package PHPTracker
  * @subpackage Seeder
  */
-class PHPTracker_Seeder_Peer extends PHPTracker_Concurrency_Forker
+class Peer implements ConcurrentInterface
 {
     /**
-     * String representation of the address to bind the socket to. Defaults to 127.0.0.1.
+     * Annotated IP address for external peers to connect to
      *
-     * Used for announcing, ie. clients will try to connect here - should be public.
+     * Defaults to 127.0.0.1.
+     * Used for announcing, should be public.
      *
      * @var string
      */
-    public $address;
+    private $external_address = '127.0.0.1';
+
+    /**
+     * Annotated IP address to bind the socket to.
+     *
+     * Defaults to 127.0.0.1.
+     *
+     * @var string
+     */
+    private $internal_address;
 
     /**
      * Port number to bind the socket to. Defaults to 6881.
      *
      * @var integer
      */
-    public $port;
+    public $port = 6881;
+
+    /**
+     * Number of connection accepting processes to fork to encure concurrent downloads.
+     *
+     * Default: 5
+     *
+     * @var integer
+     */
+    private $peer_forks = 5;
+
+    /**
+     * Number of active external seeders (fully downloaded files) after
+     * which the seed server stops seeding. This is to save bandwidth costs.
+     *
+     * Default: 0 - don't stop.
+     *
+     * @var integer
+     */
+    private $seeders_stop_seeding = 0;
 
     /**
      * Azureus-style peer ID generated from the address and port.
@@ -32,47 +71,35 @@ class PHPTracker_Seeder_Peer extends PHPTracker_Concurrency_Forker
     public $peer_id;
 
     /**
-     * Configuration of this class.
-     *
-     * @var PHPTracker_Config_Interface
-     */
-    protected $config;
-
-    /**
      * Persistence class to save/retrieve data.
      *
-     * @var PHPTracker_Persistence_Interface
+     * @var PHPTracker\Persistence\PersistenceInterface
      */
-    protected $persistence;
+    private $persistence;
 
     /**
      * Logger object used to log messages and errors in this class.
      *
-     * @var PHPTracker_Logger_Interface
+     * @var PHPTracker\Logger\LoggerInterface
      */
-    protected $logger;
+    private $logger;
 
     /**
      * Open socket that accepts incoming connections. Child processes share this.
      *
      * @var resource
      */
-    protected $listening_socket;
+    private $listening_socket;
 
     /**
-     * One and only supported protocol name.
+     * One and only supported protocol name, Bittorrent 1.0.
      */
     const PROTOCOL_STRING = 'BitTorrent protocol';
 
     /**
-     * Default address to bind the listening socket to.
+     * Prefix for the generated peer id.
      */
-    const DEFAULT_ADDRESS       = '127.0.0.1';
-
-    /**
-     * Default port to bind the listening socket to.
-     */
-    const DEFAULT_PORT          = 6881;
+    const PEER_ID_PREFIX = '-PT0001-';
 
     /**
      * To prevent possible memory leaks, every fork terminates after X iterations.
@@ -83,21 +110,148 @@ class PHPTracker_Seeder_Peer extends PHPTracker_Concurrency_Forker
     const STOP_AFTER_ITERATIONS = 20;
 
     /**
-     * Setting up class from config.
+     * Setting up instance.
      *
-     * @param PHPTracker_Config_Interface $config
+     * @param PersistenceInterface $persistence Persitence implementation.
+     *                                          Has to be shared with announcer
+     *                                          and torrent creator.
      */
-    public function  __construct( PHPTracker_Config_Interface $config )
+    public function  __construct( PersistenceInterface $persistence )
     {
-        $this->config       = $config;
+        $this->persistence           = $persistence;
+        $this->logger                = new BlackholeLogger();
+        $this->internal_address      = $this->external_address;
 
-        $this->persistence           = $this->config->get( 'persistence' );
-        $this->logger                = $this->config->get( 'logger', false, new PHPTracker_Logger_Blackhole() );
-        $this->external_address      = $this->config->get( 'seeder_address', false, self::DEFAULT_ADDRESS );
-        $this->internal_address      = $this->config->get( 'seeder_internal_address', false, $this->external_address );
-        $this->port                  = $this->config->get( 'seeder_port', false, self::DEFAULT_PORT );
+        $this->peer_id               = $this->generatePeerId();
+    }
 
-        $this->peer_id      = $this->generatePeerId();
+    /**
+     * Sets "public" IP address of the sverver that is sent to peers from the tracker.
+     *
+     * Default: 127.0.0.1
+     *
+     * @param string $external_address Annotated IP address.
+     * @return self For fluent interface.
+     */
+    public function setExternalAddress( $external_address )
+    {
+        $this->external_address = $external_address;
+        return $this;
+    }
+
+    /**
+     * Gets "public" IP address of the sverver that is sent to peers from the tracker.
+     *
+     * Default: 127.0.0.1
+     *
+     * @return string
+     */
+    public function getExternalAddress()
+    {
+        return $this->external_address;
+    }
+
+    /**
+     * Sets "listen" IP address of the server, the one to bind socket to.
+     *
+     * Default: 127.0.0.1
+     *
+     * @param string $internal_address Annotated IP address.
+     * @return self For fluent interface.
+     */
+    public function setInternalAddress( $internal_address )
+    {
+        $this->internal_address = $internal_address;
+        return $this;
+    }
+
+    /**
+     * Sets port number to bind listening socket to.
+     *
+     * Default: 6881
+     *
+     * @param integer $port
+     * @return self For fluent interface.
+     */
+    public function setPort( $port )
+    {
+        $this->port = $port;
+        return $this;
+    }
+
+    /**
+     * Gets port number to bind listening socket to.
+     *
+     * Default: 6881
+     *
+     * @return integer
+     */
+    public function getPort()
+    {
+        return $this->port;
+    }
+
+    /**
+     * Sets number of connection accepting processes to fork to encure concurrent downloads.
+     *
+     * Default: 5
+     *
+     * @param integer $peer_forks
+     * @return self For fluent interface.
+     */
+    public function setPeerForks( $peer_forks )
+    {
+        $this->peer_forks = $peer_forks;
+        return $this;
+    }
+
+    /**
+     * Set number of active external seeders (fully downloaded files) after
+     * which the seed server stops seeding. This is to save bandwidth costs.
+     *
+     * Default: 0 - don't stop.
+     *
+     * @param integer $seeders_stop_seeding
+     * @return self For fluent interface.
+     */
+    public function setSeedersStopSeeding( $seeders_stop_seeding )
+    {
+        $this->seeders_stop_seeding = $seeders_stop_seeding;
+        return $this;
+    }
+
+    /**
+     * Sets logger object.
+     *
+     * Default: BlackholeLogger
+     *
+     * @param LoggerInterface $logger
+     * @return self For fluent interface.
+     */
+    public function setLogger( LoggerInterface $logger )
+    {
+        $this->logger = $logger;
+        return $this;
+    }
+
+    /**
+     * Generates unique Azuerus style peer ID from the address and port.
+     *
+     * @return string
+     */
+    private function generatePeerId()
+    {
+        return self::PEER_ID_PREFIX . substr( sha1( $this->external_address . $this->port, true ), 0, 20 );
+    }
+
+    /**
+     * Gets peer id.
+     *
+     * @return string
+     */
+    public function getPeerId()
+    {
+        return $this->peer_id;
     }
 
     /**
@@ -105,22 +259,36 @@ class PHPTracker_Seeder_Peer extends PHPTracker_Concurrency_Forker
      *
      * @return Number of forks to create. If negative, forks are recreated when exiting and absolute values is used.
      */
-    public function startParentProcess()
+    public function start()
     {
-        // Opening socket - file dscriptor will be shared among the child processes.
+        // Opening socket - file dscriptor will be shared among the children.
         $this->startListening();
 
-        // We want this many forks for connections, permanently recreated when failing (-1).
-        $peer_forks = $this->config->get( 'peer_forks' );
+        $forker = new Forker( $this );
+        $forker->fork();
+    }
 
-        if ( $peer_forks < 1 )
-        {
-            throw new PHPTracker_Seeder_Error( "Invalid peer fork number: $peer_forks. The minimum fork number is 1." );
-        }
+    /**
+     * Returns the number of the desired child processes to be forked.
+     *
+     * @return integer
+     */
+    public function getNumberOfForks()
+    {
+        return $this->peer_forks;
+    }
 
-        $this->logger->logMessage( "Seeder peer started to listen on {$this->internal_address}:{$this->port}. Forking $peer_forks children." );
-
-        return $peer_forks * -1;
+    /**
+     * Tells if processes are guarded, that is, should be restarted
+     * after they fail.
+     *
+     * In case of a server application it makes sense to restart failing forks.
+     *
+     * @return boolean
+     */
+    public function isGuarded()
+    {
+        return true;
     }
 
     /**
@@ -128,10 +296,10 @@ class PHPTracker_Seeder_Peer extends PHPTracker_Concurrency_Forker
      *
      * @param integer $slot The slot (numbered index) of the fork. Reused when recreating process.
      */
-    public function startChildProcess( $slot )
+    public function afterFork( $slot )
     {
         // Some persistence providers (eg. MySQL) should create a new connection when the process is forked.
-        if ( $this->persistence instanceof PHPTracker_Persistence_ResetWhenForking )
+        if ( $this->persistence instanceof PHPTracker\Persistence\ResetWhenForking )
         {
             $this->persistence->resetAfterForking();
         }
@@ -143,53 +311,43 @@ class PHPTracker_Seeder_Peer extends PHPTracker_Concurrency_Forker
     }
 
     /**
-     * Generates unique Azuerus style peer ID from the address and port.
-     *
-     * @return string
-     */
-    protected function generatePeerId()
-    {
-        return '-PT0001-' . substr( sha1( $this->external_address . $this->port, true ), 0, 20 );
-    }
-
-    /**
      * Setting up listening socket. Should be called before forking.
      *
-     * @throws PHPTracker_Seeder_Error_Socket When error happens during creating, binding or listening.
+     * @throws SocketError When error happens during creating, binding or listening.
      */
-    protected function startListening()
+    private function startListening()
     {
         if ( false === ( $socket = socket_create( AF_INET, SOCK_STREAM, SOL_TCP ) ) )
         {
-            throw new PHPTracker_Seeder_Error_Socket( 'Failed to create socket: ' . socket_strerror( $socket ) );
+            throw new SocketError( 'Failed to create socket: ' . socket_strerror( $socket ) );
         }
 
         $this->listening_socket = $socket;
 
         if ( false === ( $result = socket_bind( $this->listening_socket, $this->internal_address, $this->port ) ) )
         {
-            throw new PHPTracker_Seeder_Error_Socket( 'Failed to bind socket: ' . socket_strerror( $result ) );
+            throw new SocketError( "Failed to bind socket to {$this->internal_address}:{$this->port}: " . socket_strerror( $result ) );
         }
 
         // We set backlog to 5 (ie. 5 connections can be queued) - to be adjusted.
         if ( false === ( $result = socket_listen( $this->listening_socket, 5 ) ) )
         {
-            throw new PHPTracker_Seeder_Error_Socket( 'Failed to listen to socket: ' . socket_strerror( $result ) );
+            throw new SocketError( 'Failed to listen to socket: ' . socket_strerror( $result ) );
         }
     }
 
     /**
      * Loop constantly accepting incoming connections and starting to communicate with them.
      *
-     * Every incoming connection initializes a PHPTracker_Seeder_Client object.
+     * Every incoming connection initializes a Client object.
      */
-    protected function communicationLoop()
+    private function communicationLoop()
     {
         $iterations = 0;
 
         do
         {
-            $client = new PHPTracker_Seeder_Client( $this->listening_socket );
+            $client = new Client( $this->listening_socket );
             do
             {
                 try
@@ -209,7 +367,7 @@ class PHPTracker_Seeder_Peer extends PHPTracker_Concurrency_Forker
                         $this->answer( $client );
                     }
                 }
-                catch ( PHPTracker_Seeder_Error_CloseConnection $e )
+                catch ( CloseConnection $e )
                 {
                     $this->logger->logMessage( "Closing connection with peer {$client->peer_id} with address {$client->address}:{$client->port}, reason: \"{$e->getMessage()}\". Stats: " . $client->getStats() );
                     unset( $client );
@@ -231,10 +389,11 @@ class PHPTracker_Seeder_Peer extends PHPTracker_Concurrency_Forker
      * we check if we have at least N seeders beyond ourselves for the requested
      * torrent and if so, stop seeding (to spare bandwith).
      *
-     * @throws PHPTracker_Seeder_Error_CloseConnection In case when the reqeust is invalid or we don't want or cannot serve the requested torrent.
-     * @param PHPTracker_Seeder_Client $client
+     * @see http://wiki.theory.org/BitTorrentSpecification#Handshake
+     * @throws CloseConnection In case when the reqeust is invalid or we don't want or cannot serve the requested torrent.
+     * @param Client $client
      */
-    protected function shakeHand( PHPTracker_Seeder_Client $client )
+    private function shakeHand( Client $client )
     {
         $protocol_length = unpack( 'C', $client->socketRead( 1 ) );
         $protocol_length = current( $protocol_length );
@@ -242,7 +401,7 @@ class PHPTracker_Seeder_Peer extends PHPTracker_Concurrency_Forker
         if ( ( $protocol = $client->socketRead( $protocol_length ) ) !== self::PROTOCOL_STRING )
         {
             $this->logger->logError( "Client tries to connect with unsupported protocol: " . substr( $protocol, 0, 100 ) . ". Closing connection." );
-            throw new PHPTracker_Seeder_Error_CloseConnection( 'Unsupported protocol.' );
+            throw new CloseConnection( 'Unsupported protocol.' );
         }
 
         // 8 reserved void bytes.
@@ -257,19 +416,19 @@ class PHPTracker_Seeder_Peer extends PHPTracker_Concurrency_Forker
         $torrent = $this->persistence->getTorrent( $info_hash );
         if ( !isset( $torrent ) )
         {
-            throw new PHPTracker_Seeder_Error_CloseConnection( 'Unknown info hash.' );
+            throw new CloseConnection( 'Unknown info hash.' );
         }
 
         $client->torrent = $torrent;
 
         // If we have X other seeders already, we stop seeding on our own.
-        if ( 0 < ( $seeders_stop_seeding = $this->config->get( 'seeders_stop_seeding', false, 0 ) ) )
+        if ( 0 < $this->seeders_stop_seeding )
         {
             $stats = $this->persistence->getPeerStats( $info_hash, $this->peer_id );
-            if ( $stats['complete'] >= $seeders_stop_seeding )
+            if ( $stats['complete'] >= $this->seeders_stop_seeding )
             {
-                $this->logger->logMessage( "External seeder limit ($seeders_stop_seeding) reached for info hash $info_hash_readable, stopping seeding." );
-                throw new PHPTracker_Seeder_Error_CloseConnection( 'Stop seeding, we have others to seed.' );
+                $this->logger->logMessage( "External seeder limit ({$this->seeders_stop_seeding}) reached for info hash $info_hash_readable, stopping seeding." );
+                throw new CloseConnection( 'Stop seeding, we have others to seed.' );
             }
         }
 
@@ -288,10 +447,10 @@ class PHPTracker_Seeder_Peer extends PHPTracker_Concurrency_Forker
     /**
      * Reading messages from the client and answering them.
      *
-     * @throws PHPTracker_Seeder_Error_CloseConnection In case of protocol violation.
-     * @param PHPTracker_Seeder_Client $client
+     * @throws CloseConnection In case of protocol violation.
+     * @param Client $client
      */
-    protected function answer( PHPTracker_Seeder_Client $client )
+    private function answer( Client $client )
     {
         $message_length = unpack( 'N', $client->socketRead( 4 ) );
         $message_length = current( $message_length );
@@ -351,37 +510,39 @@ class PHPTracker_Seeder_Peer extends PHPTracker_Concurrency_Forker
                 $client->socketRead( $message_length );
                 break;
             default:
-                throw new PHPTracker_Seeder_Error_CloseConnection( 'Protocol violation, unsupported message.' );
+                throw new CloseConnection( 'Protocol violation, unsupported message.' );
         }
     }
 
     /**
      * Sends one block of a file to the client.
      *
-     * @param PHPTracker_Seeder_Client $client
+     * @see http://wiki.theory.org/BitTorrentSpecification#piece:_.3Clen.3D0009.2BX.3E.3Cid.3D7.3E.3Cindex.3E.3Cbegin.3E.3Cblock.3E
+     * @param Client $client
      * @param integer $piece_index Index of the piece containing the block.
-     * @param integer $block_begin Beginning of the block relative to the piece in byets.
+     * @param integer $block_begin Beginning of the block relative to the piece in bytes.
      * @param integer $length Length of the block in bytes.
      */
-    protected function sendBlock( PHPTracker_Seeder_Client $client, $piece_index, $block_begin, $length )
+    private function sendBlock( Client $client, $piece_index, $block_begin, $length )
     {
         $message = pack( 'CNN', 7, $piece_index, $block_begin ) . $client->torrent->readBlock( $piece_index, $block_begin, $length );
         $client->socketWrite( pack( 'N', strlen( $message ) ) . $message );
 
         // Saving statistics.
-        $client->addStatBytes( $length, PHPTracker_Seeder_Client::STAT_DATA_SENT );
+        $client->addStatBytes( $length, Client::STAT_DATA_SENT );
     }
 
     /**
-     * Sending intial bitfield tot he clint letting it know that we have to entire file.
+     * Sending intial bitfield to the client letting it know that we have to entire file.
      *
      * The bitfeild looks like:
      * [11111111-11111111-11100000]
-     * Meaning that we have all the 19 pieces (padding bits must be 0).
+     * Meaning that we have all the 19 pieces for example (padding bits must be 0).
      *
-     * @param PHPTracker_Seeder_Client $client
+     * @see http://wiki.theory.org/BitTorrentSpecification#bitfield:_.3Clen.3D0001.2BX.3E.3Cid.3D5.3E.3Cbitfield.3E
+     * @param Client $client
      */
-    protected function sendBitField( PHPTracker_Seeder_Client $client )
+    private function sendBitField( Client $client )
     {
         $n_pieces = ceil( $client->torrent->length / $client->torrent->size_piece );
 
