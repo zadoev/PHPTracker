@@ -61,6 +61,11 @@ class PHPTracker_Seeder_Server extends PHPTracker_Concurrency_Forker
         $this->config    = $config;
         $this->peer      = $this->config->get( 'peer' );
         $this->logger    = $this->config->get( 'logger', false, new PHPTracker_Logger_Blackhole() );
+
+        $pidFilePath = $this->config->get( 'pid_file_path', false,false);
+
+        if ( $pidFilePath )
+            $this->setPidFilePath($pidFilePath );
     }
 
     /**

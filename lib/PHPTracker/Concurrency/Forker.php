@@ -22,6 +22,12 @@ declare( ticks = 10 );
 abstract class PHPTracker_Concurrency_Forker
 {
     /**
+     * Path to pid file
+     *
+     * @var string
+     */
+    protected $run_pid_file_path = '/var/run/phptracker';
+    /**
      * Number of child processes wanted.
      *
      * @var integer
@@ -34,6 +40,16 @@ abstract class PHPTracker_Concurrency_Forker
      * @var array
      */
     protected $children = array();
+
+    /**
+     * Setting pid file path
+     *
+     * @param $path string
+     */
+    public function setPidFilePath($path)
+    {
+        $this->run_pid_file_path = $path;
+    }
 
     /**
      * Executing setup method of the inheriting class, then fork child processes.
@@ -109,7 +125,7 @@ abstract class PHPTracker_Concurrency_Forker
         ignore_user_abort( true );
 
         // Let the world know about our process ID in a standard way.
-        file_put_contents( '/var/run/phptracker', getmypid() );
+        file_put_contents( $this->run_pid_file_path, getmypid() );
 
         // Finally we start the procedure as we would without detaching.
         $arguments = func_get_args();
