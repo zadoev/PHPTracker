@@ -15,7 +15,7 @@ class PHPTracker_Persistence_MysqlCached extends PHPTracker_Persistence_Mysql
         $key = MemcacheKeys::getPhpTrackerPeersCache($info_hash);
         $results = Yii::app()->cache->get($key);
 
-        if ( $results === false )
+        if ( ! $results  )
         {
             $sql = <<<SQL
 SELECT
@@ -38,10 +38,12 @@ SQL;
                 ':info_hash'    => $info_hash,
                 ':peer_id'      => $peer_id,
             ) );
-
+            $results = $results->toArray();
             Yii::app()->cache->set($key, $results, MemcacheKeys::getPhpTrackerPeersCacheTime());
 
         }
+
+
 
 
         if ( $compact )
